@@ -1,25 +1,5 @@
 #!/usr/bin/env python3
-"""
-PWCM (Persuasiveness-Weighted Cascade Model) experiments runner.
 
-Data layout (default):
-  repo_root/
-    snacs_main.py
-    data/
-      large_twitch_edges.csv
-      large_twitch_features.csv   (optional; not required for diffusion)
-
-CLI features:
-- Choose seed size and number of permutations from command line
-- PWCM model diffusion: p_ij = deg(j) / sum_{k in N(i)} deg(k)  (paper Eq. (1))
-- Heuristics for seed selection: pagerank, degree, random, expected-benefit (paper)
-- Outputs:
-  - Spread comparison plot (spread vs seed size)
-  - Graph image (sampled subgraph, because the full Twitch graph is too large to render)
-
-Notes:
-- Edges are treated as undirected for neighbor sets; PWCM probabilities are directional by definition.
-"""
 
 from __future__ import annotations
 
