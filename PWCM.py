@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 
 
 from __future__ import annotations
@@ -14,10 +13,6 @@ import networkx as nx
 
 EdgeProb = Dict[Tuple[int, int], float]
 
-
-# ------------------------
-# Paths / loading
-# ------------------------
 
 def resolve_paths(data_dir: Optional[str], edges_file: str, features_file: str):
     base_dir = Path(__file__).resolve().parent
@@ -52,7 +47,6 @@ def load_graph_edges_csv(
                 found = (a, b)
                 break
 
-        # 2) If still not found, fall back to the first two columns if they look plausible
         if found is None and df.shape[1] >= 2:
             a, b = df.columns[0], df.columns[1]
             found = (a, b)
@@ -73,15 +67,9 @@ def load_graph_edges_csv(
 
 
 
-# ------------------------
-# PWCM model (paper Eq. (1))
-# ------------------------
+
 
 def compute_pwcm_probs(G: nx.Graph, p_scale: float = 1.0) -> EdgeProb:
-    """
-    PWCM with scaling:
-      p_ij = min(1, p_scale * (deg(j) / sum_{k in N(i)} deg(k)))
-    """
     deg = dict(G.degree())
     pwcm_p: EdgeProb = {}
 
@@ -103,9 +91,6 @@ def compute_pwcm_probs(G: nx.Graph, p_scale: float = 1.0) -> EdgeProb:
 
 
 def pwcm_cascade(G: nx.Graph, seeds: Iterable[int], pwcm_p: EdgeProb, rng: np.random.Generator) -> int:
-    """
-    One PWCM cascade simulation (IC-style).
-    """
     active_queue = list(seeds)
     activated: Set[int] = set(seeds)
 
@@ -123,23 +108,14 @@ def pwcm_cascade(G: nx.Graph, seeds: Iterable[int], pwcm_p: EdgeProb, rng: np.ra
 
 
 def pwcm_mc(G: nx.Graph, seeds: List[int], pwcm_p: EdgeProb, perms: int, rng_seed: int) -> float:
-    """
-    Average spread across `perms` permutations/simulations.
-    """
     rng = np.random.default_rng(rng_seed)
     spreads = [pwcm_cascade(G, seeds, pwcm_p, rng) for _ in range(perms)]
     return float(np.mean(spreads))
 
 
-# ------------------------
-# Expected-benefit heuristic (paper Eq. (2) + algorithm)
-# ------------------------
 
 def expected_benefit(i: int, S_i: Set[int], NS_i: Set[int], pwcm_p: EdgeProb) -> float:
-    """
-    Paper Eq. (2):
-      E(i) = Π_{j in S_i} (1 - p_{j,i}) * (1 + Σ_{k in NS_i} p_{i,k})
-    """
+   
     prod_term = 1.0
     for j in S_i:
         pji = pwcm_p.get((int(j), int(i)), 0.0)
@@ -153,15 +129,6 @@ def expected_benefit(i: int, S_i: Set[int], NS_i: Set[int], pwcm_p: EdgeProb) ->
 
 
 def expected_benefit_heuristic_order(G: nx.Graph, pwcm_p: EdgeProb, k_max: int) -> List[int]:
-    """
-    Returns an ORDERED seed list up to k_max (so we can reuse prefixes for curves).
-
-    Implements the paper's seed selection algorithm based on expected benefit:
-    - init E(i)=1+Σ_{k in N_i} p_{ik}, S_i empty, NS_i = N_i
-    - pick max E(i), add to seeds
-    - for neighbors i of the chosen seed j: move j from NS_i to S_i and recompute E(i) using Eq. (2)
-    - repeat until k_max seeds
-    """
     nodes = list(G.nodes())
     neighbors: Dict[int, Set[int]] = {int(i): set(map(int, G.neighbors(i))) for i in nodes}
 
@@ -198,10 +165,6 @@ def expected_benefit_heuristic_order(G: nx.Graph, pwcm_p: EdgeProb, k_max: int) 
     return seeds_ordered
 
 
-# ------------------------
-# Heuristics: degree, pagerank, random
-# ------------------------
-
 def degree_heuristic_order(G: nx.Graph, k_max: int) -> List[int]:
     deg = dict(G.degree())
     return [int(n) for n, _ in sorted(deg.items(), key=lambda x: x[1], reverse=True)[:k_max]]
@@ -219,10 +182,6 @@ def random_heuristic_order(G: nx.Graph, k_max: int, rng: np.random.Generator) ->
         return nodes.tolist()
     return rng.choice(nodes, size=k_max, replace=False).tolist()
 
-
-# ------------------------
-# Plotting outputs
-# ------------------------
 
 def plot_spread_curves(xs: List[int], series: Dict[str, List[float]], out_path: Path, title: str):
     import matplotlib.pyplot as plt
@@ -247,14 +206,7 @@ def save_graph_image(
     sample_n: int = 300,
     seed: int = 42,
 ):
-    """
-    Save a DRAWABLE graph image by sampling a subgraph.
-    Rendering the full Twitch graph is not practical.
-
-    mode:
-      - top_degree: take top-N nodes by degree and induced subgraph
-      - random: random N nodes induced subgraph
-    """
+   
     import matplotlib.pyplot as plt
 
     rng = np.random.default_rng(seed)
@@ -275,7 +227,7 @@ def save_graph_image(
 
         H = G.subgraph(nodes).copy()
 
-    # Layout can be slow; spring_layout is ok for ~300 nodes
+
     pos = nx.spring_layout(H, seed=seed)
 
     plt.figure(figsize=(10, 8))
@@ -288,9 +240,6 @@ def save_graph_image(
     plt.close()
 
 
-# ------------------------
-# Experiment runner
-# ------------------------
 
 def run_experiment(
     G: nx.Graph,
@@ -359,7 +308,6 @@ def parse_args() -> argparse.Namespace:
     help="Scaling factor for PWCM probabilities (p_ij = min(1, p_scale * base_p_ij)).")
 
 
-    # Compare heuristics (paper compares degree, pagerank, random, expected benefit) :contentReference[oaicite:2]{index=2}
     p.add_argument(
         "--methods",
         default="degree,pagerank,random,expected_benefit",
@@ -419,7 +367,6 @@ def main() -> int:
     methods = [m.strip() for m in args.methods.split(",") if m.strip()]
     print(f"[info] Comparing methods: {methods}")
 
-    # If curve mode: compute curve and plot like the paper's Fig. 3 :contentReference[oaicite:3]{index=3}
     if args.curve:
         series = run_experiment(
             G=G,
@@ -445,11 +392,9 @@ def main() -> int:
 
         return 0
 
-    # Otherwise: single-k evaluation only (no curve)
     print("[info] Single-k run (no curve). Computing spreads at k = --seeds")
     rng = np.random.default_rng(args.rng_seed)
 
-    # Seed orders, take prefix k
     seed_orders: Dict[str, List[int]] = {}
     for m in methods:
         if m == "degree":
